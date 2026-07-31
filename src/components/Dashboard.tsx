@@ -81,6 +81,40 @@ export function Dashboard({ data, onQuickAdd, onQuickLog }: { data: AppData; onQ
   const quote = QUOTES[new Date().getDate() % QUOTES.length];
   const daysLeft = daysLeftInMonth(new Date());
 
+  // AI Spending Alerts — client-side trend checks
+  const spendingAlert = useMemo(() => {
+    const dayOfMonth = new Date().getDate();
+    const catTotals = categoryTotals(monthTxns);
+
+    // 1) Red alert — daily safe spend has run low
+    if (dailySafe < 100) {
+      return {
+        tone: 'error' as const,
+        title: dailySafe <= 0 ? 'Budget exhausted for this month' : 'Daily safe spend is critically low',
+        body:
+          dailySafe <= 0
+            ? `You've used your entire monthly budget. Pause all non-essential spending and rely on cash-only for the rest of the month.`
+            : `You have only ${formatMoney(dailySafe, cur)} of safe spending left per day. Cook at home, skip paid outings, and move any leftover funds toward your savings goal to recover.`,
+      };
+    }
+
+    // 2) Amber warning — Food over 50% of its budget before the 15th
+    // Food budget is derived as 30% of the total monthly budget.
+    const foodBudget = totalBudget * 0.3;
+    const foodSpent = catTotals['Food'] || 0;
+    if (foodBudget > 0 && dayOfMonth < 15 && foodSpent > foodBudget * 0.5) {
+      const usedPct = pct(foodSpent, foodBudget);
+      return {
+        tone: 'warning' as const,
+        title: `Food budget is ${usedPct}% used and it's only the ${dayOfMonth}${ordinal(dayOfMonth)}`,
+        body: `You've spent ${formatMoney(foodSpent, cur)} of your ~${formatMoney(Math.round(foodBudget), cur)} food budget before mid-month. Slow down: meal-prep for the week, favour the mess over delivery apps, and set a daily food cap of ${formatMoney(Math.round((foodBudget - foodSpent) / Math.max(1, daysLeft)), cur)}.`,
+      };
+    }
+
+    // 3) Healthy — subtle green badge
+    return { tone: 'ok' as const, title: '', body: '' };
+  }, [monthTxns, dailySafe, totalBudget, daysLeft, cur]);
+
   // Charts
   const catTotals = categoryTotals(monthTxns);
   const pieData = {
