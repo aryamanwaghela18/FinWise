@@ -166,7 +166,7 @@ function App() {
           <>
             <Reminders data={store.data} onDismiss={store.dismissReminder} />
             <div className="mt-3">
-              <Dashboard data={store.data} onQuickAdd={() => { setEditing(null); setShowAdd(true); }} />
+              <Dashboard data={store.data} onQuickAdd={() => { setEditing(null); setShowAdd(true); }} onQuickLog={handleQuickLog} />
             </div>
           </>
         )}

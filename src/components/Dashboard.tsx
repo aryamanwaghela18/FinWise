@@ -21,6 +21,8 @@ import {
 } from '../analysis';
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../icons';
 import { useCountUp } from '../hooks';
+import { SplitBill } from './SplitBill';
+import type { Transaction } from '../types';
 
 ChartJS.register(ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend, Filler);
 
@@ -41,7 +43,7 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Flame, Zap, Sparkles,
 };
 
-export function Dashboard({ data, onQuickAdd }: { data: AppData; onQuickAdd: () => void }) {
+export function Dashboard({ data, onQuickAdd, onQuickLog }: { data: AppData; onQuickAdd: () => void; onQuickLog: (t: Omit<Transaction, 'id' | 'createdAt'>) => void }) {
   const profile = data.profile!;
   const cur = profile.currency;
   const txns = data.transactions;
@@ -166,6 +168,9 @@ export function Dashboard({ data, onQuickAdd }: { data: AppData; onQuickAdd: () 
         <StatTile icon={Calendar} label="This Week" value={formatMoney(weekExpenses, cur)} sub={`${weekTxns.filter(t => t.type === 'expense').length} transactions`} color="accent" />
         <StatTile icon={CalendarDays} label="This Month" value={formatMoney(monthExpenses, cur)} sub={`${pct(monthExpenses, totalBudget)}% of budget`} color="warning" />
       </div>
+
+      {/* Split a Bill */}
+      <SplitBill currency={cur} onLog={onQuickLog} />
 
       {/* Daily Safe Spending + Health Score */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
