@@ -60,6 +60,11 @@ function App() {
     setShowAdd(true);
   };
 
+  const handleQuickLog = (t: Omit<Transaction, 'id' | 'createdAt'>) => {
+    store.addTransaction(t);
+    setToast({ msg: `Logged ${store.data.profile!.currency}${t.amount} · ${t.category}` });
+  };
+
   const handleTransferToSavings = (amount: number) => {
     // Add as income transaction tagged to savings, and contribute to first goal if exists
     store.addTransaction({
@@ -165,7 +170,7 @@ function App() {
             </div>
           </>
         )}
-        {tab === 'transactions' && <Transactions data={store.data} onDelete={handleDelete} onEdit={handleEdit} />}
+        {tab === 'transactions' && <Transactions data={store.data} onDelete={handleDelete} onEdit={handleEdit} onQuickLog={handleQuickLog} />}
         {tab === 'goals' && <Goals data={store.data} onAdd={store.addGoal} onContribute={store.contributeGoal} onDelete={store.deleteGoal} />}
         {tab === 'subscriptions' && <Subscriptions data={store.data} onAdd={store.addSubscription} onDelete={store.deleteSubscription} />}
         {tab === 'achievements' && <Achievements data={store.data} />}

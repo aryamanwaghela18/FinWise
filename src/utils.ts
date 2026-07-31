@@ -1,4 +1,4 @@
-import type { Transaction, Category } from './types';
+import type { Transaction, Category, TransactionType, PaymentMethod } from './types';
 
 export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -246,4 +246,120 @@ export function timeAgo(ts: number): string {
   const days = Math.floor(hrs / 24);
   if (days < 30) return `${days}d ago`;
   return new Date(ts).toLocaleDateString();
+}
+
+// ---------------------------------------------------------------------------
+// Bank / UPI SMS parsing
+// ---------------------------------------------------------------------------
+
+export interface ParsedSMS {
+  amount: number;
+  merchant: string;
+  category: Category;
+  type: TransactionType;
+  paymentMethod: PaymentMethod;
+}
+
+// Keyword -> category map. Order matters: earlier, more specific matches win.
+const MERCHANT_CATEGORY: { keywords: string[]; category: Category }[] = [
+  { category: 'Coffee', keywords: ['starbucks', 'cafe coffee day', 'ccd', 'chai point', 'barista', 'blue tokai', 'third wave', 'chaayos', 'coffee'] },
+  { category: 'Food', keywords: ['swiggy', 'zomato', 'dominos', "domino's", 'pizza hut', 'pizza', 'mcdonald', 'kfc', 'burger king', 'burger', 'faasos', 'box8', 'eatsure', 'behrouz', 'ovenstory', 'wow momo', 'haldiram', 'dhaba', 'biryani', 'restaurant', 'eatery', 'tea stall', 'canteen', 'food'] },
+  { category: 'Grocery', keywords: ['bigbasket', 'big basket', 'blinkit', 'zepto', 'grofers', 'instamart', 'jiomart', 'jio mart', 'dmart', 'd-mart', 'reliance fresh', 'more supermarket', 'spencer', 'grocery', 'kirana', 'supermarket'] },
+  { category: 'Travel', keywords: ['uber', 'ola', 'rapido', 'irctc', 'redbus', 'red bus', 'ixigo', 'makemytrip', 'make my trip', 'goibibo', 'yatra', 'indigo', 'vistara', 'air india', 'spicejet', 'metro', 'namma metro', 'cab', 'auto', 'rickshaw', 'taxi', 'railway', 'flight', 'bus', 'train'] },
+  { category: 'Fuel', keywords: ['petrol', 'diesel', 'fuel', 'hp petrol', 'hpcl', 'iocl', 'indian oil', 'bharat petroleum', 'bpcl', 'shell', 'nayara', 'essar', 'filling station'] },
+  { category: 'Subscriptions', keywords: ['netflix', 'spotify', 'prime video', 'amazon prime', 'hotstar', 'disney', 'sonyliv', 'sony liv', 'zee5', 'youtube premium', 'jiosaavn', 'gaana', 'apple music', 'audible', 'subscription'] },
+  { category: 'Entertainment', keywords: ['bookmyshow', 'book my show', 'pvr', 'inox', 'cinepolis', 'cinema', 'movie', 'multiplex', 'gaming', 'steam', 'playstation', 'xbox'] },
+  { category: 'Recharge', keywords: ['recharge', 'jio', 'airtel', 'vodafone', 'vi ', 'idea', 'bsnl', 'dth', 'tatasky', 'tata sky', 'dish tv', 'prepaid', 'postpaid'] },
+  { category: 'Shopping', keywords: ['amazon', 'flipkart', 'myntra', 'ajio', 'meesho', 'snapdeal', 'nykaa', 'tatacliq', 'tata cliq', 'reliance trends', 'lifestyle', 'shoppers stop', 'decathlon', 'ikea', 'croma', 'shopping'] },
+  { category: 'Healthcare', keywords: ['apollo', 'medplus', 'med plus', '1mg', 'tata 1mg', 'pharmeasy', 'netmeds', 'pharmacy', 'hospital', 'clinic', 'diagnostic', 'medical', 'chemist', 'doctor', 'lab'] },
+  { category: 'Books', keywords: ['bookstore', 'crossword', 'oswaal', 'chegg', 'coursera', 'udemy', 'kindle', 'books'] },
+  { category: 'College Fees', keywords: ['college', 'university', 'tuition', 'semester', 'exam fee', 'admission', 'institute', 'academy'] },
+  { category: 'Rent', keywords: ['rent', 'landlord', 'nobroker', 'no broker', 'pg ', 'hostel', 'maintenance'] },
+];
+
+function categorize(merchant: string, raw: string): Category {
+  const hay = `${merchant} ${raw}`.toLowerCase();
+  for (const { keywords, category } of MERCHANT_CATEGORY) {
+    if (keywords.some((k) => hay.includes(k))) return category;
+  }
+  return 'Other';
+}
+
+function detectPaymentMethod(raw: string): PaymentMethod {
+  const s = raw.toLowerCase();
+  if (/credit\s*card|cc\b/.test(s)) return 'Credit Card';
+  if (/debit\s*card/.test(s)) return 'Debit Card';
+  if (/\bcash\b/.test(s)) return 'Cash';
+  // UPI apps / general UPI SMS default to UPI
+  if (/upi|phonepe|phone pe|gpay|g pay|google pay|paytm|bhim|amazon pay|@\w+/.test(s)) return 'UPI';
+  return 'UPI';
+}
+
+function titleCase(s: string): string {
+  return s
+    .trim()
+    .replace(/\s+/g, ' ')
+    .split(' ')
+    .map((w) => (w.length > 3 ? w.charAt(0).toUpperCase() + w.slice(1) : w))
+    .join(' ');
+}
+
+/**
+ * Parses a standard Indian bank / UPI transaction SMS and extracts the
+ * amount, merchant/payee, an auto-assigned category, direction and method.
+ * Returns null when no amount could be confidently detected.
+ */
+export function parseTransactionSMS(input: string): ParsedSMS | null {
+  const raw = input.trim();
+  if (!raw) return null;
+
+  // --- Amount --------------------------------------------------------------
+  // Matches: Rs 250, Rs.250, INR 250, ₹250, Rs 1,250.50
+  let amount = NaN;
+  const amtWithCurrency = raw.match(/(?:rs\.?|inr|₹)\s*([0-9][\d,]*(?:\.\d{1,2})?)/i);
+  if (amtWithCurrency) {
+    amount = parseFloat(amtWithCurrency[1].replace(/,/g, ''));
+  } else {
+    // Fallback: "250 Rs" / "250 INR"
+    const amtTrailing = raw.match(/([0-9][\d,]*(?:\.\d{1,2})?)\s*(?:rs\.?|inr|rupees)/i);
+    if (amtTrailing) amount = parseFloat(amtTrailing[1].replace(/,/g, ''));
+  }
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+
+  // --- Direction (income vs expense) ---------------------------------------
+  const type: TransactionType = /\b(credited|received|deposit(?:ed)?|refund(?:ed)?|added|cashback)\b/i.test(raw)
+    ? 'income'
+    : 'expense';
+
+  // --- Merchant / payee -----------------------------------------------------
+  const trailingStop = '(?:\\s+(?:on|via|using|ref(?:erence)?|txn|dated|from|to|a\\/c|acct|account|upi|bank|thru|through|no\\.?|id|dt|bal|avl)\\b|[.,;:!]|$)';
+  // Generic, non-merchant captures we should ignore ("your account", "a/c", ...)
+  const isGeneric = (m: string) => /^(your|a|an|the|account|a\/c|acct|self|wallet)$/i.test(m.trim());
+
+  const grab = (re: RegExp): string => {
+    const mm = raw.match(re);
+    if (!mm) return '';
+    let m = mm[1].replace(/\s+/g, ' ').trim();
+    m = m.replace(/@\S+/g, '').replace(/^(your|the)\s+/i, '').replace(/[.\-]+$/, '').trim();
+    return isGeneric(m) ? '' : m;
+  };
+
+  let merchant = '';
+  if (type === 'income') {
+    // Credits: prefer the payer following "from" / "by".
+    merchant = grab(new RegExp(`(?:from|by)\\s+([A-Za-z0-9&'.\\-@ ]+?)${trailingStop}`, 'i'));
+  }
+  if (!merchant) {
+    // Debits (and income fallback): text after "to"/"at"/"towards"/"for".
+    merchant = grab(new RegExp(`(?:in favour of|towards|paid to|sent to|to|at|for)\\s+([A-Za-z0-9&'.\\-@ ]+?)${trailingStop}`, 'i'));
+  }
+  if (!merchant) merchant = type === 'income' ? 'Received' : 'Merchant';
+
+  return {
+    amount,
+    merchant: titleCase(merchant),
+    category: categorize(merchant, raw),
+    type,
+    paymentMethod: detectPaymentMethod(raw),
+  };
 }
