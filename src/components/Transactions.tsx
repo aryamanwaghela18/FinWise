@@ -3,10 +3,12 @@ import { Search, Trash2, Star, Pencil, ArrowDownCircle, ArrowUpCircle } from 'lu
 import type { AppData, Transaction } from '../types';
 import { CATEGORY_ICONS, CATEGORY_COLORS } from '../icons';
 import { formatMoney, formatDate, parseDate, dateToStr, startOfWeek } from '../utils';
+import { QuickLog } from './QuickLog';
+import { QuickCategoryLog } from './QuickCategoryLog';
 
 type FilterKey = 'all' | 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'income_only' | 'expense_only' | 'custom';
 
-export function Transactions({ data, onDelete, onEdit }: { data: AppData; onDelete: (id: string) => void; onEdit: (t: Transaction) => void }) {
+export function Transactions({ data, onDelete, onEdit, onQuickLog }: { data: AppData; onDelete: (id: string) => void; onEdit: (t: Transaction) => void; onQuickLog: (t: Omit<Transaction, 'id' | 'createdAt'>) => void }) {
   const cur = data.profile!.currency;
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterKey>('all');
@@ -97,6 +99,12 @@ export function Transactions({ data, onDelete, onEdit }: { data: AppData; onDele
           <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} className="bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-white focus:outline-none focus:border-primary-500 [color-scheme:dark]" />
         </div>
       )}
+
+      {/* Quick Category Log */}
+      <QuickCategoryLog currency={cur} onLog={onQuickLog} />
+
+      {/* Quick Log widget */}
+      <QuickLog currency={cur} onLog={onQuickLog} />
 
       {/* List */}
       <div className="space-y-2">
