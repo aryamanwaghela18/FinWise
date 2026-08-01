@@ -86,6 +86,7 @@ export interface AppData {
   xp: number;
   seenAdvice: string[];
   lastReminderDate: string | null;
+  lastRolloverMonth: string | null; // YYYY-MM of the last month processed for budget rollover
 }
 
 export const CATEGORIES: Category[] = [

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Wallet, LayoutDashboard, Receipt, Target, RefreshCw, Trophy, FileText, Settings as SettingsIcon, Menu, X } from 'lucide-react';
+import { Wallet, LayoutDashboard, Receipt, Target, RefreshCw, Trophy, FileText, Settings as SettingsIcon, Menu, X, PiggyBank, Sparkles } from 'lucide-react';
+import { formatMoney } from './utils';
 import { useStore } from './store';
 import { Onboarding } from './components/Onboarding';
 import { Dashboard } from './components/Dashboard';
@@ -164,9 +165,21 @@ function App() {
       <main className="lg:ml-64 p-4 sm:p-6 max-w-6xl mx-auto pb-24 lg:pb-6">
         {tab === 'dashboard' && (
           <>
+            {store.rolloverAmount !== null && store.rolloverAmount > 0 && (
+              <RolloverBanner
+                amount={store.rolloverAmount}
+                currency={store.data.profile.currency}
+                onDismiss={store.dismissRollover}
+              />
+            )}
             <Reminders data={store.data} onDismiss={store.dismissReminder} />
             <div className="mt-3">
-              <Dashboard data={store.data} onQuickAdd={() => { setEditing(null); setShowAdd(true); }} onQuickLog={handleQuickLog} />
+              <Dashboard
+                data={store.data}
+                onQuickAdd={() => { setEditing(null); setShowAdd(true); }}
+                onQuickLog={handleQuickLog}
+                onUpdateBudget={store.setBudget}
+              />
             </div>
           </>
         )}
@@ -186,6 +199,32 @@ function App() {
 
       {/* Toast */}
       {toast && <Toast message={toast.msg} onUndo={toast.undo} onClose={() => setToast(null)} />}
+    </div>
+  );
+}
+
+function RolloverBanner({ amount, currency, onDismiss }: { amount: number; currency: string; onDismiss: () => void }) {
+  return (
+    <div className="mb-3 flex items-start gap-3 rounded-2xl p-4 bg-gradient-to-r from-success-500/15 to-primary-500/15 ring-1 ring-success-500/30">
+      <div className="w-9 h-9 rounded-xl bg-success-500/20 flex items-center justify-center shrink-0">
+        <PiggyBank className="w-5 h-5 text-success-400" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <Sparkles className="w-4 h-4 text-success-400 shrink-0" />
+          <p className="text-sm font-semibold text-white">New month, new savings boost!</p>
+        </div>
+        <p className="text-sm text-slate-300 mt-0.5">
+          Unspent balance of {formatMoney(amount, currency)} from last month has been automatically added to your Savings!
+        </p>
+      </div>
+      <button
+        onClick={onDismiss}
+        aria-label="Dismiss"
+        className="w-8 h-8 rounded-lg flex items-center justify-center hover:bg-white/10 text-slate-400 hover:text-white transition-colors shrink-0"
+      >
+        <X className="w-4 h-4" />
+      </button>
     </div>
   );
 }

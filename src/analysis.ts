@@ -392,9 +392,12 @@ export function calcDailySafeSpend(data: AppData): number {
   const monthExpenses = sumExpenses(monthTxns);
   const totalBudget = data.profile.monthlyIncome + data.profile.monthlyPocketMoney;
   const remaining = totalBudget - monthExpenses;
+  // Reserve the monthly savings goal before dividing what is safe to spend.
+  const savingsGoal = data.profile.monthlySavingsGoal || 0;
+  const netSpendable = remaining - savingsGoal;
   const daysLeft = daysLeftInMonth(new Date());
-  if (daysLeft <= 0) return Math.max(0, remaining);
-  return Math.max(0, Math.round(remaining / daysLeft));
+  if (daysLeft <= 0) return Math.max(0, Math.round(netSpendable));
+  return Math.max(0, Math.round(netSpendable / daysLeft));
 }
 
 export function calcLevel(xp: number): { level: number; title: string; progress: number; nextLevelXp: number; currentLevelXp: number } {
