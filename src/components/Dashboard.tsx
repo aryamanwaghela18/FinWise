@@ -22,6 +22,7 @@ import {
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../icons';
 import { useCountUp } from '../hooks';
 import { SplitBill } from './SplitBill';
+import { AIFinancialAssistant } from './AIFinancialAssistant';
 import type { Transaction } from '../types';
 
 ChartJS.register(ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend, Filler);
@@ -205,6 +206,9 @@ export function Dashboard({ data, onQuickAdd, onQuickLog }: { data: AppData; onQ
 
       {/* Split a Bill */}
       <SplitBill currency={cur} onLog={onQuickLog} />
+
+      {/* Talk to AI Financial Assistant */}
+      <AIFinancialAssistant data={data} />
 
       {/* Daily Safe Spending + Health Score */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
