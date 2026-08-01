@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Pie, Bar, Line, Doughnut } from 'react-chartjs-2';
 import {
   Chart as ChartJS, ArcElement, BarElement, LineElement, PointElement,
@@ -8,6 +8,7 @@ import {
   Wallet, TrendingDown, Calendar, CalendarDays, PiggyBank, Target, Flame,
   BellRing, Quote, Sparkles, AlertTriangle, TrendingUp, Zap, Coffee,
   Utensils, ShoppingBag, Clapperboard, CalendarDays as CalDays, PiggyBank as Piggy,
+  Pencil,
 } from 'lucide-react';
 import type { AppData } from '../types';
 import {
@@ -22,6 +23,8 @@ import {
 import { CATEGORY_COLORS, CATEGORY_ICONS } from '../icons';
 import { useCountUp } from '../hooks';
 import { SplitBill } from './SplitBill';
+import { AIFinancialAssistant } from './AIFinancialAssistant';
+import { EditBudgetModal } from './EditBudgetModal';
 import type { Transaction } from '../types';
 
 ChartJS.register(ArcElement, BarElement, LineElement, PointElement, CategoryScale, LinearScale, Tooltip, Legend, Filler);
@@ -43,10 +46,11 @@ const ICON_MAP: Record<string, React.ComponentType<{ className?: string }>> = {
   Flame, Zap, Sparkles,
 };
 
-export function Dashboard({ data, onQuickAdd, onQuickLog }: { data: AppData; onQuickAdd: () => void; onQuickLog: (t: Omit<Transaction, 'id' | 'createdAt'>) => void }) {
+export function Dashboard({ data, onQuickAdd, onQuickLog, onUpdateBudget }: { data: AppData; onQuickAdd: () => void; onQuickLog: (t: Omit<Transaction, 'id' | 'createdAt'>) => void; onUpdateBudget: (budget: number, savingsGoal: number) => void }) {
   const profile = data.profile!;
   const cur = profile.currency;
   const txns = data.transactions;
+  const [editBudgetOpen, setEditBudgetOpen] = useState(false);
 
   const monthTxns = useMemo(() => txnsThisMonth(txns), [txns]);
   const weekTxns = useMemo(() => txnsThisWeek(txns), [txns]);
@@ -197,7 +201,7 @@ export function Dashboard({ data, onQuickAdd, onQuickLog }: { data: AppData; onQ
 
       {/* Stat tiles */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <StatTile icon={Wallet} label="Budget Remaining" value={formatMoney(budgetRemaining, cur)} sub={`${daysLeft} days left`} color="primary" />
+        <StatTile icon={Wallet} label="Budget Remaining" value={formatMoney(budgetRemaining, cur)} sub={`${daysLeft} days left`} color="primary" onEdit={() => setEditBudgetOpen(true)} />
         <StatTile icon={TrendingDown} label="Today's Spending" value={formatMoney(todayExpenses, cur)} sub={`${todayTxns.filter(t => t.type === 'expense').length} transactions`} color="error" />
         <StatTile icon={Calendar} label="This Week" value={formatMoney(weekExpenses, cur)} sub={`${weekTxns.filter(t => t.type === 'expense').length} transactions`} color="accent" />
         <StatTile icon={CalendarDays} label="This Month" value={formatMoney(monthExpenses, cur)} sub={`${pct(monthExpenses, totalBudget)}% of budget`} color="warning" />
@@ -206,6 +210,9 @@ export function Dashboard({ data, onQuickAdd, onQuickLog }: { data: AppData; onQ
       {/* Split a Bill */}
       <SplitBill currency={cur} onLog={onQuickLog} />
 
+      {/* Talk to AI Financial Assistant */}
+      <AIFinancialAssistant data={data} />
+
       {/* Daily Safe Spending + Health Score */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <div className="glass rounded-2xl p-5 lg:col-span-2 bg-gradient-to-br from-primary-500/10 to-accent-500/10">
@@ -213,9 +220,12 @@ export function Dashboard({ data, onQuickAdd, onQuickLog }: { data: AppData; onQ
             <Zap className="w-5 h-5 text-accent-400" />
             <h3 className="font-display font-semibold text-white">Daily Safe Spending</h3>
           </div>
-          <p className="text-3xl font-display font-bold text-white tabular-nums">{formatMoney(dailySafe, cur)}</p>
+          <p className="text-3xl font-display font-bold text-white tabular-nums">{formatMoney(dailySafe, cur)}<span className="text-base font-medium text-slate-400">/day</span></p>
           <p className="text-sm text-slate-400 mt-1">
-            Based on your remaining budget and {daysLeft} days left this month, you can safely spend {formatMoney(dailySafe, cur)} today.
+            Based on your remaining budget and {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left this month, you can safely spend {formatMoney(dailySafe, cur)} today.
+          </p>
+          <p className="text-xs text-slate-500 mt-2 font-mono bg-white/5 rounded-lg px-3 py-2">
+            (Remaining Budget {formatMoney(budgetRemaining, cur)} − Savings Goal {formatMoney(profile.monthlySavingsGoal, cur)}) ÷ {daysLeft} {daysLeft === 1 ? 'day' : 'days'} = {formatMoney(dailySafe, cur)}/day
           </p>
           {dailySafe < 150 && dailySafe > 0 && (
             <div className="mt-3 flex items-start gap-2 bg-warning-500/10 rounded-lg p-3">
@@ -259,7 +269,16 @@ export function Dashboard({ data, onQuickAdd, onQuickLog }: { data: AppData; onQ
               <PiggyBank className="w-5 h-5 text-success-400" />
               <h3 className="font-display font-semibold text-white">Current Savings</h3>
             </div>
-            <span className="text-xs text-slate-400">{formatMoney(profile.monthlySavingsGoal, cur)} goal</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-400">{formatMoney(profile.monthlySavingsGoal, cur)} goal</span>
+              <button
+                onClick={() => setEditBudgetOpen(true)}
+                aria-label="Edit budget and savings target"
+                className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
           <p className="text-2xl font-display font-bold text-white">{formatMoney(currentSavings, cur)}</p>
           <div className="mt-3 h-2 bg-white/10 rounded-full overflow-hidden">
@@ -438,11 +457,21 @@ export function Dashboard({ data, onQuickAdd, onQuickLog }: { data: AppData; onQ
           )}
         </div>
       </div>
+
+      {/* Edit Budget & Savings modal */}
+      <EditBudgetModal
+        open={editBudgetOpen}
+        onClose={() => setEditBudgetOpen(false)}
+        currency={cur}
+        initialBudget={totalBudget}
+        initialSavingsGoal={profile.monthlySavingsGoal}
+        onSave={onUpdateBudget}
+      />
     </div>
   );
 }
 
-function StatTile({ icon: Icon, label, value, sub, color }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; sub: string; color: string }) {
+function StatTile({ icon: Icon, label, value, sub, color, onEdit }: { icon: React.ComponentType<{ className?: string }>; label: string; value: string; sub: string; color: string; onEdit?: () => void }) {
   const colors: Record<string, string> = {
     primary: 'text-primary-400 bg-primary-500/10',
     error: 'text-error-400 bg-error-500/10',
@@ -450,9 +479,20 @@ function StatTile({ icon: Icon, label, value, sub, color }: { icon: React.Compon
     warning: 'text-warning-400 bg-warning-500/10',
   };
   return (
-    <div className="glass rounded-2xl p-4">
-      <div className={`w-9 h-9 rounded-lg flex items-center justify-center mb-2 ${colors[color]}`}>
-        <Icon className="w-4 h-4" />
+    <div className="glass rounded-2xl p-4 relative">
+      <div className="flex items-center justify-between mb-2">
+        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${colors[color]}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+        {onEdit && (
+          <button
+            onClick={onEdit}
+            aria-label={`Edit ${label}`}
+            className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
       <p className="text-xs text-slate-400">{label}</p>
       <p className="text-lg font-display font-bold text-white tabular-nums">{value}</p>

@@ -24,6 +24,7 @@ export const DEFAULT_DATA: AppData = {
   xp: 0,
   seenAdvice: [],
   lastReminderDate: null,
+  lastRolloverMonth: null,
 };
 
 export function loadData(): AppData {

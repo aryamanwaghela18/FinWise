@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { AppData, Transaction, SavingsGoal, Subscription, Profile, Settings } from './types';
 import { loadData, saveData, resetData, exportJSON, importJSON } from './storage';
-import { uid, todayStr } from './utils';
+import { uid, todayStr, monthKey } from './utils';
 import { XP_REWARDS, checkAchievements } from './analysis';
 
 export function useStore() {
   const [data, setData] = useState<AppData>(() => loadData());
   const [undoBuffer, setUndoBuffer] = useState<{ txn: Transaction | null; timer: number | null }>({ txn: null, timer: null });
+  const [rolloverAmount, setRolloverAmount] = useState<number | null>(null);
   const undoRef = useRef(undoBuffer);
   undoRef.current = undoBuffer;
 
@@ -14,6 +15,56 @@ export function useStore() {
   useEffect(() => {
     saveData(data);
   }, [data]);
+
+  // End-of-month rollover: when a new month begins, move last month's unspent
+  // spendable budget straight into the user's savings. Runs once on mount.
+  useEffect(() => {
+    setData((prev) => {
+      if (!prev.profile) return prev;
+      const currentMonth = monthKey(todayStr()); // YYYY-MM
+      const last = prev.lastRolloverMonth;
+      // First run — just record the current month, nothing to roll over yet.
+      if (!last) return { ...prev, lastRolloverMonth: currentMonth };
+      if (last === currentMonth) return prev; // already processed this month
+
+      const totalBudget = prev.profile.monthlyIncome + prev.profile.monthlyPocketMoney;
+      const lastMonthExpenses = prev.transactions
+        .filter((t) => t.type === 'expense' && monthKey(t.date) === last)
+        .reduce((s, t) => s + t.amount, 0);
+      const leftover = Math.max(0, Math.round(totalBudget - lastMonthExpenses));
+
+      if (leftover <= 0) {
+        return { ...prev, lastRolloverMonth: currentMonth };
+      }
+
+      const rollTxn: Transaction = {
+        id: uid(),
+        type: 'income',
+        amount: leftover,
+        category: 'Other',
+        date: todayStr(),
+        time: new Date().toTimeString().slice(0, 5),
+        paymentMethod: 'UPI',
+        description: 'Unspent budget rollover',
+        favourite: false,
+        createdAt: Date.now(),
+      };
+      // Also push the rollover toward the first active savings goal, if any.
+      const goals = prev.goals.length > 0
+        ? prev.goals.map((g, i) => (i === 0 ? { ...g, currentAmount: Math.min(g.targetAmount, g.currentAmount + leftover) } : g))
+        : prev.goals;
+
+      // Surface the success banner.
+      setRolloverAmount(leftover);
+
+      return {
+        ...prev,
+        transactions: [rollTxn, ...prev.transactions],
+        goals,
+        lastRolloverMonth: currentMonth,
+      };
+    });
+  }, []);
 
   // Apply theme to document
   useEffect(() => {
@@ -35,6 +86,33 @@ export function useStore() {
   const setProfile = useCallback((profile: Profile) => {
     update((d) => ({ ...d, profile }));
   }, [update]);
+
+  // Update the monthly spendable budget and savings target from the dashboard.
+  // The total budget is stored across income + pocket money, so preserve their
+  // ratio while making them sum to the new budget.
+  const setBudget = useCallback((budget: number, savingsGoal: number) => {
+    update((d) => {
+      if (!d.profile) return d;
+      const safeBudget = Math.max(0, Math.round(budget));
+      const safeGoal = Math.max(0, Math.round(savingsGoal));
+      const total = d.profile.monthlyIncome + d.profile.monthlyPocketMoney;
+      let income: number;
+      let pocket: number;
+      if (total > 0) {
+        income = Math.round((safeBudget * d.profile.monthlyIncome) / total);
+        pocket = safeBudget - income;
+      } else {
+        income = 0;
+        pocket = safeBudget;
+      }
+      return {
+        ...d,
+        profile: { ...d.profile, monthlyIncome: income, monthlyPocketMoney: pocket, monthlySavingsGoal: safeGoal },
+      };
+    });
+  }, [update]);
+
+  const dismissRollover = useCallback(() => setRolloverAmount(null), []);
 
   const addTransaction = useCallback((txn: Omit<Transaction, 'id' | 'createdAt'>) => {
     update((d) => {
@@ -147,6 +225,9 @@ export function useStore() {
   return {
     data,
     setProfile,
+    setBudget,
+    rolloverAmount,
+    dismissRollover,
     addTransaction,
     updateTransaction,
     deleteTransaction,
