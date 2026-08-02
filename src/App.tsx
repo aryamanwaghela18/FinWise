@@ -12,6 +12,7 @@ import { Reports } from './components/Reports';
 import { Settings } from './components/Settings';
 import { QuickActions } from './components/QuickActions';
 import { Reminders } from './components/Reminders';
+import { AuthButton } from './components/AuthButton';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { Toast } from './components/Modal';
 import type { Transaction } from './types';
@@ -122,6 +123,9 @@ function App() {
             </button>
           ))}
         </nav>
+        <div className="mt-auto pt-4 border-t border-white/5">
+          <AuthButton />
+        </div>
       </aside>
 
       {/* Mobile header */}
@@ -132,9 +136,12 @@ function App() {
           </div>
           <span className="font-display font-bold text-white">FinWise AI</span>
         </div>
-        <button onClick={() => setNavOpen(true)} className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-slate-300">
-          <Menu className="w-5 h-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <AuthButton />
+          <button onClick={() => setNavOpen(true)} className="w-9 h-9 rounded-lg bg-white/5 flex items-center justify-center text-slate-300">
+            <Menu className="w-5 h-5" />
+          </button>
+        </div>
       </header>
 
       {/* Mobile nav drawer */}
