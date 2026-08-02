@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
-import { LogOut, LogIn } from 'lucide-react';
+import { LogOut } from 'lucide-react';
 import { auth, googleProvider } from '../lib/firebase';
 
 export function AuthButton() {
